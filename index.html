@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>話し方練習アプリ</title>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="スピーチ練習">
+    
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #f5f7fa;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.05);
+            text-align: center;
+            width: 100%;
+            max-width: 400px;
+        }
+        button {
+            background-color: #007aff;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 12px;
+            margin: 10px 0;
+            width: 100%;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:active { background-color: #0056b3; }
+        #recordBtn.recording { background-color: #ff3b30; }
+        #odai {
+            font-size: 20px;
+            font-weight: bold;
+            margin: 20px 0;
+            min-height: 60px;
+            color: #333;
+        }
+        audio { width: 100%; margin-top: 20px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>話し方トレーニング</h2>
+    
+    <button onclick="nextOdai()">🎲 お題を出す</button>
+    <div id="odai">上のボタンを押してお題を表示</div>
+    
+    <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+    
+    <button id="recordBtn" onclick="toggleRecording()">🎙️ 録音スタート</button>
+    <audio id="audioPlayer" controls></audio>
+</div>
+
+<script>
+    // お題のリスク（自分で自由に変更・追加できます）
+    const odaiList = [
+        "最近一番嬉しかったこと",
+        "おすすめの買ってよかったもの",
+        "10年後の自分はどうなっている？",
+        "私の趣味とその魅力について",
+        "昨日食べた美味しいものの食レポ",
+        "自己紹介を1分間でお願いします"
+    ];
+
+    let mediaRecorder;
+    let audioChunks = [];
+    let isRecording = false;
+
+    // お題をランダムに表示する関数
+    function nextOdai() {
+        const randomIndex = Math.floor(Math.random() * odaiList.length);
+        document.getElementById('odai').innerText = odaiList[randomIndex];
+    }
+
+    // 録音の開始・停止を切り替える関数
+    async function toggleRecording() {
+        const btn = document.getElementById('recordBtn');
+        
+        if (!isRecording) {
+            // 録音開始
+            audioChunks = [];
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                
+                mediaRecorder.ondataavailable = event => {
+                    audioChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/mp4' });
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    document.getElementById('audioPlayer').src = audioUrl;
+                };
+
+                mediaRecorder.start();
+                btn.innerText = "🛑 録音を停止する";
+                btn.classList.add('recording');
+                isRecording = true;
+            } catch (err) {
+                alert("マイクの許可が必要です: " + err);
+            }
+        } else {
+            // 録音停止
+            mediaRecorder.stop();
+            btn.innerText = "🎙️ 録音スタート";
+            btn.classList.remove('recording');
+            isRecording = false;
+        }
+    }
+</script>
+
+</body>
+</html>
