@@ -152,7 +152,7 @@
         document.getElementById('odai').innerText = odaiList[randomIndex];
     }
 
-    async function toggleRecording() {
+async function toggleRecording() {
         const btn = document.getElementById('recordBtn');
         const analyzeBtn = document.getElementById('analyzeBtn');
         const resultArea = document.getElementById('resultArea');
@@ -163,14 +163,15 @@
             resultArea.style.display = 'none';
             
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                mediaRecorder = new MediaRecorder(stream);
+                // マイクのストリームを変数に保存しておく
+                window.localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(window.localStream);
                 
                 mediaRecorder.ondataavailable = event => { audioChunks.push(event.data); };
                 mediaRecorder.onstop = () => {
                     currentAudioBlob = new Blob(audioChunks, { type: 'audio/mp4' });
                     document.getElementById('audioPlayer').src = URL.createObjectURL(currentAudioBlob);
-                    analyzeBtn.style.display = 'block'; // 録音完了で解析ボタンを表示
+                    analyzeBtn.style.display = 'block';
                 };
 
                 mediaRecorder.start();
@@ -181,13 +182,19 @@
                 alert("マイクのアクセスを許可してください: " + err);
             }
         } else {
+            // 【修正ポイント】録音を止めると同時に、マイクのすべての通信（トラック）を完全に停止する
             mediaRecorder.stop();
+            
+            if (window.localStream) {
+                window.localStream.getTracks().forEach(track => track.stop());
+            }
+            
             btn.innerText = "🎙️ 録音スタート";
             btn.classList.remove('recording');
             isRecording = false;
         }
     }
-
+    
     // Gemini APIを使って音声を直接解析する関数
     async function analyzeAudioWithGemini() {
         const apiKey = localStorage.getItem('gemini_api_key');
