@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>話し方練習アプリ</title>
+    <title>話し方練習 AIアプリ</title>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="スピーチ練習">
@@ -28,7 +28,7 @@
             box-shadow: 0 10px 30px rgba(0,0,0,0.04);
             text-align: center;
             width: 100%;
-            max-width: 400px;
+            max-width: 450px;
         }
         h2 { color: #1d1d1f; margin-bottom: 24px; font-size: 22px; }
         button {
@@ -47,7 +47,8 @@
         .btn-odai:active { background-color: #0056b3; }
         #recordBtn { background-color: #34c759; }
         #recordBtn.recording { background-color: #ff3b30; animation: pulse 1.5s infinite; }
-        #downloadBtn { background-color: #5856d6; display: none; }
+        #analyzeBtn { background-color: #5856d6; display: none; }
+        #analyzeBtn:disabled { background-color: #aeaeb2; cursor: not-allowed; }
         
         #odai {
             font-size: 18px;
@@ -64,6 +65,26 @@
         }
         audio { width: 100%; margin-top: 20px; border-radius: 8px; }
         
+        /* 解析結果の表示エリア */
+        #resultArea {
+            margin-top: 24px;
+            padding: 20px;
+            background-color: #f2f2f7;
+            border-radius: 16px;
+            text-align: left;
+            font-size: 14px;
+            line-height: 1.6;
+            color: #1d1d1f;
+            display: none;
+            white-space: pre-wrap;
+        }
+        .setting-link {
+            font-size: 12px;
+            color: #007aff;
+            cursor: pointer;
+            margin-top: 15px;
+            display: inline-block;
+        }
         @keyframes pulse {
             0% { transform: scale(1); }
             50% { transform: scale(0.98); opacity: 0.8; }
@@ -74,7 +95,7 @@
 <body>
 
 <div class="container">
-    <h2>話し方トレーニング</h2>
+    <h2>話し方 AIトレーニング</h2>
     
     <button class="btn-odai" onclick="nextOdai()">🎲 お題を出す</button>
     <div id="odai">ボタンを押してお題を表示</div>
@@ -84,7 +105,13 @@
     <button id="recordBtn" onclick="toggleRecording()">🎙️ 録音スタート</button>
     <audio id="audioPlayer" controls></audio>
     
-    <button id="downloadBtn" onclick="downloadAudio()">📥 音声ファイルを保存</button>
+    <!-- 自動解析ボタン -->
+    <button id="analyzeBtn" onclick="analyzeAudioWithGemini()">🤖 AI自動解析を実行</button>
+    
+    <!-- 解析結果表示エリア -->
+    <div id="resultArea"></div>
+
+    <span class="setting-link" onclick="setApiKey(true)">⚙️ APIキーを設定・変更する</span>
 </div>
 
 <script>
@@ -102,6 +129,23 @@
     let mediaRecorder;
     let audioChunks = [];
     let isRecording = false;
+    let currentAudioBlob = null;
+
+    // 起動時にAPIキーがなければ入力を求める
+    window.addEventListener('DOMContentLoaded', () => {
+        setApiKey(false);
+    });
+
+    function setApiKey(forcePrompt) {
+        let key = localStorage.getItem('gemini_api_key');
+        if (!key || forcePrompt) {
+            const input = prompt("Gemini APIキーを入力してください:\n（キーはあなたのスマホ内にのみ安全に保存されます）", key || "");
+            if (input) {
+                localStorage.setItem('gemini_api_key', input.trim());
+                alert("APIキーを保存しました。");
+            }
+        }
+    }
 
     function nextOdai() {
         const randomIndex = Math.floor(Math.random() * odaiList.length);
@@ -110,29 +154,23 @@
 
     async function toggleRecording() {
         const btn = document.getElementById('recordBtn');
-        const downloadBtn = document.getElementById('downloadBtn');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const resultArea = document.getElementById('resultArea');
         
         if (!isRecording) {
             audioChunks = [];
-            // 非表示にする（新しい録音を始めるため）
-            downloadBtn.style.display = 'none'; 
+            analyzeBtn.style.display = 'none';
+            resultArea.style.display = 'none';
             
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 mediaRecorder = new MediaRecorder(stream);
                 
-                mediaRecorder.ondataavailable = event => {
-                    audioChunks.push(event.data);
-                };
-
+                mediaRecorder.ondataavailable = event => { audioChunks.push(event.data); };
                 mediaRecorder.onstop = () => {
-                    // iPhone対応のため、一般的なaudio/mp4形式でBlobを作成
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/mp4' });
-                    const audioUrl = URL.createObjectURL(audioBlob);
-                    document.getElementById('audioPlayer').src = audioUrl;
-                    
-                    // 録音完了したら保存ボタンを表示
-                    downloadBtn.style.display = 'block';
+                    currentAudioBlob = new Blob(audioChunks, { type: 'audio/mp4' });
+                    document.getElementById('audioPlayer').src = URL.createObjectURL(currentAudioBlob);
+                    analyzeBtn.style.display = 'block'; // 録音完了で解析ボタンを表示
                 };
 
                 mediaRecorder.start();
@@ -150,20 +188,71 @@
         }
     }
 
-    // 音声ファイルをiPhone本体に保存する関数
-    function downloadAudio() {
-        const audioSrc = document.getElementById('audioPlayer').src;
-        if (!audioSrc) return;
+    // Gemini APIを使って音声を直接解析する関数
+    async function analyzeAudioWithGemini() {
+        const apiKey = localStorage.getItem('gemini_api_key');
+        if (!apiKey) {
+            alert("APIキーが設定されていません。右下の設定から入力してください。");
+            return;
+        }
+
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const resultArea = document.getElementById('resultArea');
         
-        const a = document.createElement('a');
-        a.href = audioSrc;
-        // ファイル名（日時を付けると管理しやすいです）
-        const now = new Date();
-        const timeStr = now.getFullYear() + "" + (now.getMonth()+1) + "" + now.getDate() + "_" + now.getHours() + "" + now.getMinutes();
-        a.download = `speech_${timeStr}.mp4`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        analyzeBtn.disabled = true;
+        analyzeBtn.innerText = "⏳ AIが音声を聞いて解析中...";
+        resultArea.style.display = 'block';
+        resultArea.innerText = "音声を分析しています。しばらくお待ちください（約10〜20秒）...";
+
+        try {
+            // 1. 音声ファイルをBase64（文字列）データに変換する
+            const reader = new FileReader();
+            reader.readAsDataURL(currentAudioBlob);
+            reader.onloadend = async () => {
+                const base64Audio = reader.result.split(',')[1];
+
+                // 2. Gemini API (gemini-1.5-pro) にリクエストを送る
+                // 音声の直接理解が可能な 1.5 Pro を使用します
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`;
+                
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{
+                            parts: [
+                                {
+                                    inlineData: {
+                                        mimeType: "audio/mp4",
+                                        data: base64Audio
+                                    }
+                                },
+                                {
+                                    text: "この音声は私が話し方の練習をした録音データです。音声を直接聞いて、以下の4つの観点から多角的に解析・採点（各25点、合計100点満点）し、プロのようなアドバイスを記述してください。\n\n1. 声の大きさ・抑揚\n2. 話す速さ・テンポ\n3. フィラー（「えーっと」「あの」などの無駄な言葉の秒数と回数）\n4. 聞き取りづらさ・発音\n\n最後に総合評価と「次回の練習で一番意識すべきワンポイント改善案」を分かりやすく教えてください。"
+                                }
+                            ]
+                        }]
+                    })
+                });
+
+                const json = await response.json();
+                
+                if (response.ok) {
+                    // 解析結果を画面に表示
+                    const aiResponse = json.candidates[0].content.parts[0].text;
+                    resultArea.innerText = aiResponse;
+                } else {
+                    resultArea.innerText = "エラーが発生しました:\n" + JSON.stringify(json);
+                }
+                
+                analyzeBtn.disabled = false;
+                analyzeBtn.innerText = "🤖 AI自動解析を実行";
+            };
+        } catch (err) {
+            resultArea.innerText = "通信エラーが発生しました: " + err;
+            analyzeBtn.disabled = false;
+            analyzeBtn.innerText = "🤖 AI自動解析を実行";
+        }
     }
 </script>
 
