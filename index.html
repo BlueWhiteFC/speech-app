@@ -9,6 +9,7 @@
     <meta name="apple-mobile-web-app-title" content="スピーチ練習">
     
     <style>
+        *, *::before, *::after { box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             background-color: #f5f7fa;
@@ -16,43 +17,58 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 100vh;
+            min-height: 100vh;
             margin: 0;
             padding: 20px;
-            box-sizing: border-box;
         }
         .container {
             background: white;
             padding: 30px;
-            border-radius: 20px;
-            box-shadow: 0 10px 20px rgba(0,0,0,0.05);
+            border-radius: 24px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.04);
             text-align: center;
             width: 100%;
             max-width: 400px;
         }
+        h2 { color: #1d1d1f; margin-bottom: 24px; font-size: 22px; }
         button {
-            background-color: #007aff;
             color: white;
             border: none;
-            padding: 15px 30px;
+            padding: 16px 20px;
             font-size: 16px;
-            font-weight: bold;
-            border-radius: 12px;
-            margin: 10px 0;
+            font-weight: 600;
+            border-radius: 14px;
+            margin: 8px 0;
             width: 100%;
             cursor: pointer;
-            transition: background 0.2s;
+            transition: all 0.2s ease;
         }
-        button:active { background-color: #0056b3; }
-        #recordBtn.recording { background-color: #ff3b30; }
+        .btn-odai { background-color: #007aff; }
+        .btn-odai:active { background-color: #0056b3; }
+        #recordBtn { background-color: #34c759; }
+        #recordBtn.recording { background-color: #ff3b30; animation: pulse 1.5s infinite; }
+        #downloadBtn { background-color: #5856d6; display: none; }
+        
         #odai {
-            font-size: 20px;
+            font-size: 18px;
             font-weight: bold;
-            margin: 20px 0;
-            min-height: 60px;
-            color: #333;
+            margin: 24px 0;
+            padding: 16px;
+            background-color: #f2f2f7;
+            border-radius: 12px;
+            min-height: 54px;
+            color: #1d1d1f;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-        audio { width: 100%; margin-top: 20px; }
+        audio { width: 100%; margin-top: 20px; border-radius: 8px; }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(0.98); opacity: 0.8; }
+            100% { transform: scale(1); }
+        }
     </style>
 </head>
 <body>
@@ -60,43 +76,47 @@
 <div class="container">
     <h2>話し方トレーニング</h2>
     
-    <button onclick="nextOdai()">🎲 お題を出す</button>
-    <div id="odai">上のボタンを押してお題を表示</div>
+    <button class="btn-odai" onclick="nextOdai()">🎲 お題を出す</button>
+    <div id="odai">ボタンを押してお題を表示</div>
     
-    <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+    <hr style="border: 0; border-top: 1px solid #e5e5ea; margin: 24px 0;">
     
     <button id="recordBtn" onclick="toggleRecording()">🎙️ 録音スタート</button>
     <audio id="audioPlayer" controls></audio>
+    
+    <button id="downloadBtn" onclick="downloadAudio()">📥 音声ファイルを保存</button>
 </div>
 
 <script>
-    // お題のリスク（自分で自由に変更・追加できます）
     const odaiList = [
         "最近一番嬉しかったこと",
         "おすすめの買ってよかったもの",
         "10年後の自分はどうなっている？",
         "私の趣味とその魅力について",
         "昨日食べた美味しいものの食レポ",
-        "自己紹介を1分間でお願いします"
+        "自己紹介を1分間でお願いします",
+        "最近イラッとしたことと、その解消法",
+        "これから挑戦してみたいこと"
     ];
 
     let mediaRecorder;
     let audioChunks = [];
     let isRecording = false;
 
-    // お題をランダムに表示する関数
     function nextOdai() {
         const randomIndex = Math.floor(Math.random() * odaiList.length);
         document.getElementById('odai').innerText = odaiList[randomIndex];
     }
 
-    // 録音の開始・停止を切り替える関数
     async function toggleRecording() {
         const btn = document.getElementById('recordBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
         
         if (!isRecording) {
-            // 録音開始
             audioChunks = [];
+            // 非表示にする（新しい録音を始めるため）
+            downloadBtn.style.display = 'none'; 
+            
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 mediaRecorder = new MediaRecorder(stream);
@@ -106,9 +126,13 @@
                 };
 
                 mediaRecorder.onstop = () => {
+                    // iPhone対応のため、一般的なaudio/mp4形式でBlobを作成
                     const audioBlob = new Blob(audioChunks, { type: 'audio/mp4' });
                     const audioUrl = URL.createObjectURL(audioBlob);
                     document.getElementById('audioPlayer').src = audioUrl;
+                    
+                    // 録音完了したら保存ボタンを表示
+                    downloadBtn.style.display = 'block';
                 };
 
                 mediaRecorder.start();
@@ -116,15 +140,30 @@
                 btn.classList.add('recording');
                 isRecording = true;
             } catch (err) {
-                alert("マイクの許可が必要です: " + err);
+                alert("マイクのアクセスを許可してください: " + err);
             }
         } else {
-            // 録音停止
             mediaRecorder.stop();
             btn.innerText = "🎙️ 録音スタート";
             btn.classList.remove('recording');
             isRecording = false;
         }
+    }
+
+    // 音声ファイルをiPhone本体に保存する関数
+    function downloadAudio() {
+        const audioSrc = document.getElementById('audioPlayer').src;
+        if (!audioSrc) return;
+        
+        const a = document.createElement('a');
+        a.href = audioSrc;
+        // ファイル名（日時を付けると管理しやすいです）
+        const now = new Date();
+        const timeStr = now.getFullYear() + "" + (now.getMonth()+1) + "" + now.getDate() + "_" + now.getHours() + "" + now.getMinutes();
+        a.download = `speech_${timeStr}.mp4`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
     }
 </script>
 
