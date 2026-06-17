@@ -194,7 +194,7 @@ async function toggleRecording() {
             isRecording = false;
         }
     }
-    
+
     // Gemini APIを使って音声を直接解析する関数
     async function analyzeAudioWithGemini() {
         const apiKey = localStorage.getItem('gemini_api_key');
@@ -220,8 +220,7 @@ async function toggleRecording() {
 
                 // 2. Gemini API (gemini-1.5-pro) にリクエストを送る
                 // 音声の直接理解が可能な 1.5 Pro を使用します
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`;
-                
+                const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key=${apiKey}`;                
                 const response = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
